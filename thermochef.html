@@ -1,0 +1,193 @@
+<!-- ... existing code ... -->
+            <div style="padding-bottom: max(1rem, env(safe-area-inset-bottom));" class="px-5 pt-3 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+                <button type="button" onclick="closeTransferModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmation (remplace confirm() natif) -->
+    <div id="confirmResetModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-900 text-sm">Réinitialiser les recettes ?</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Toutes vos recettes personnalisées seront remplacées par les recettes d'origine.</p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('confirmResetModal').classList.add('hidden')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Annuler</button>
+                <button type="button" onclick="executeResetData()" class="px-4 py-2 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition">Réinitialiser</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+<!-- ... existing code ... -->
+        window.confirmResetData = function confirmResetData() {
+            const modal = document.getElementById('confirmResetModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+            }
+        };
+
+        window.executeResetData = function executeResetData() {
+            recipes = JSON.parse(JSON.stringify(defaultRecipes));
+            saveRecipes();
+            renderRecipes();
+            const modal = document.getElementById('confirmResetModal');
+            if (modal) modal.classList.add('hidden');
+            showToast('Données réinitialisées');
+        };
+
+        // Génère une copie HTML propre et autonome de l'application (avec les recettes actuelles embarquées)
+        window.buildCleanAppHtml = function buildCleanAppHtml() {
+            const clone = document.documentElement.cloneNode(true);
+            ['detailModal', 'formModal', 'transferModal', 'confirmResetModal'].forEach(modalId => {
+                const el = clone.querySelector('#' + modalId);
+                if (el) el.classList.add('hidden');
+            });
+            const toastEl = clone.querySelector('#toast');
+            if (toastEl) toastEl.classList.add('translate-y-24', 'opacity-0');
+            return '<!DOCTYPE html>\n' + clone.outerHTML;
+        };
+
+        // Téléchargement robuste avec multiple fallbacks (Blob -> Data URI -> Nouvel onglet)
+        window.downloadFullApp = function downloadFullApp() {
+            try {
+                const htmlContent = window.buildCleanAppHtml();
+                const fileName = 'ThermoChef-Recettes.html';
+                const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = fileName;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+
+                setTimeout(() => {
+                    if (link.parentNode) document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }, 1000);
+
+                showToast('Téléchargement de ThermoChef-Recettes.html lancé !');
+            } catch (err) {
+                try {
+                    const htmlContent = window.buildCleanAppHtml();
+                    const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent);
+                    window.open(dataUrl, '_blank');
+                    showToast('Ouverture du fichier dans un nouvel onglet...');
+                } catch (e) {
+                    window.openTransferModal();
+                    showToast('Utilisez l’option "Copier le code" si le navigateur bloque le fichier.');
+                }
+            }
+        };
+
+        window.openTransferModal = function openTransferModal() {
+            const modal = document.getElementById('transferModal');
+            if (modal) modal.classList.remove('hidden');
+        };
+
+        window.closeTransferModal = function closeTransferModal() {
+            const modal = document.getElementById('transferModal');
+            if (modal) modal.classList.add('hidden');
+        };
+
+        // Ouvre l'application Mail pré-remplie avec instructions pour l'iPhone
+        window.sendByEmailWithInstructions = function sendByEmailWithInstructions() {
+            const subject = encodeURIComponent('Mon Appli Recettes Thermomix (ThermoChef)');
+            const currentUrl = window.location.href.startsWith('http') ? `\nLien direct : ${window.location.href}\n` : '';
+            const body = encodeURIComponent(
+                `Bonjour,\n\nVoici mon application de recettes Thermomix (ThermoChef) à installer sur iPhone.${currentUrl}\n` +
+                `Comment l'installer sur mon iPhone :\n` +
+                `1. Pensez à joindre le fichier "ThermoChef-Recettes.html" téléchargé à cet e-mail avant de l'envoyer (ou utilisez le lien direct ci-dessus).\n` +
+                `2. Sur l'iPhone, ouvrez le fichier ou le lien dans le navigateur Safari.\n` +
+                `3. Touchez le bouton Partager (carré avec flèche vers le haut en bas de l'écran).\n` +
+                `4. Sélectionnez "Sur l'écran d'accueil" puis "Ajouter".`
+            );
+            window.location.href = `mailto:?subject=${subject}&body=${body}`;
+        };
+
+        // Partage natif iOS / AirDrop / Mail avec le fichier joint
+        window.shareAppFileNatively = async function shareAppFileNatively() {
+            try {
+                const htmlContent = window.buildCleanAppHtml();
+                const file = new File([htmlContent], 'ThermoChef-Recettes.html', { type: 'text/html' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        title: 'ThermoChef - Mes Recettes Thermomix',
+                        text: 'Ouvrez ce fichier dans Safari sur iPhone puis touchez Partager > Sur l’écran d’accueil.',
+                        files: [file]
+                    });
+                    showToast('Partage effectué !');
+                } else if (navigator.share && window.location.href.startsWith('http')) {
+                    await navigator.share({
+                        title: 'ThermoChef - Mes Recettes Thermomix',
+                        url: window.location.href
+                    });
+                } else {
+                    window.downloadFullApp();
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    window.downloadFullApp();
+                }
+            }
+        };
+
+        // Copie du lien direct de la page
+        window.copyCurrentUrl = function copyCurrentUrl() {
+            const url = window.location.href;
+            if (!url.startsWith('http')) {
+                showToast('Cette page est en mode aperçu local : utilisez le téléchargement ou la copie du code.');
+                return;
+            }
+            window.copyTextFallback(url, 'Lien copié ! Collez-le dans un mail ou message vers votre iPhone.');
+        };
+
+        // Copie du code HTML complet en secours
+        window.copyAppHtmlCode = function copyAppHtmlCode() {
+            const htmlContent = window.buildCleanAppHtml();
+            window.copyTextFallback(htmlContent, 'Code HTML complet copié dans le presse-papiers !');
+        };
+
+        window.copyTextFallback = function copyTextFallback(text, successMsg) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast(successMsg)).catch(() => {
+                    window.execCommandCopy(text, successMsg);
+                });
+            } else {
+                window.execCommandCopy(text, successMsg);
+            }
+        };
+
+        window.execCommandCopy = function execCommandCopy(text, successMsg) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+                showToast(successMsg);
+            } catch (e) {
+                showToast('Impossible de copier automatiquement.');
+            }
+            document.body.removeChild(ta);
+        };
+
+        window.showToast = function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = message;
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-24', 'opacity-0'), 3500);
+        };
+    </script>
+</body>
+</html>
